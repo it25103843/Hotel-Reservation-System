@@ -1,0 +1,275 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<title>My invoices — Halcyon House</title>
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<link rel="stylesheet" href="css/style.css" />
+
+</head>
+<body>
+<div class="hh-shell">
+  <div class="hh-side" id="sidebar"></div>
+  <div class="hh-main">
+    <div class="hh-topbar"><div class="serif" style="font-size:20px;">My invoices</div></div>
+    <div class="hh-content">
+      <p class="hh-page-sub">Outstanding and paid invoices, and your saved cards</p>
+      <div id="hh-toast" style="display:none;margin-bottom:16px;"></div>
+
+      <div class="hh-panel">
+        <div class="hh-panel-head">
+          <div class="hh-panel-title">Saved cards</div>
+          <button class="hh-btn sm outline" onclick="openAddCardModal()">+ Add card</button>
+        </div>
+        <div class="hh-mini-grid" id="cardsList"></div>
+        <div id="cardsEmpty" class="hh-empty" style="display:none;">No saved cards yet — add one here, or add one at checkout.</div>
+      </div>
+
+      <div class="hh-panel" style="margin-top:20px;">
+        <div class="hh-panel-title" style="margin-bottom:14px;">Invoices</div>
+        <div class="hh-table-wrap">
+          <table class="hh-table">
+            <thead><tr><th>Room / booking</th><th>Amount</th><th>Status</th><th>Paid with</th><th></th></tr></thead>
+            <tbody id="rows"></tbody>
+          </table>
+          <div id="emptyMsg" class="hh-empty" style="display:none;">No invoices yet.</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Pay modal -->
+<div class="hh-modal-backdrop" id="payModal">
+  <div class="hh-modal">
+    <div class="hh-modal-head"><div class="hh-modal-title">Pay invoice</div><button class="hh-iconbtn" onclick="closePayModal()">&times;</button></div>
+    <div id="payFormView">
+      <input type="hidden" id="payId" />
+      <div id="payAmountBox" style="background:var(--bg);border-radius:8px;padding:12px;margin-bottom:16px;font-size:14px;"></div>
+
+      <div class="hh-paytabs">
+        <button type="button" class="hh-paytab" id="methodCardBtn" onclick="selectMethod('CARD')">
+          <span class="ico">💳</span><span class="ttl">Card payment</span><span class="sub">Visa / Mastercard / Amex</span>
+        </button>
+        <button type="button" class="hh-paytab" id="methodCashBtn" onclick="selectMethod('CASH')">
+          <span class="ico">💵</span><span class="ttl">Cash</span><span class="sub">Pay at the front desk</span>
+        </button>
+      </div>
+
+      <div id="cardSection" style="display:none;">
+        <div id="savedCardsList" class="hh-mini-grid" style="margin-bottom:12px;"></div>
+        <button type="button" class="hh-btn sm outline" id="useNewCardBtn" onclick="showPayCardForm(true)" style="display:none;margin-bottom:12px;">+ Use a different card</button>
+
+        <div id="payCardForm" style="display:none;">
+          <div id="pcPreviewMount"></div>
+          <div class="hh-field"><label class="hh-label">Card number</label><input class="hh-input" id="pcNumber" inputmode="numeric" autocomplete="cc-number" placeholder="1234 5678 9012 3456" maxlength="19" /></div>
+          <div class="hh-field"><label class="hh-label">Cardholder name</label><input class="hh-input" id="pcName" autocomplete="cc-name" placeholder="Name as on card" /></div>
+          <div class="hh-field-row">
+            <div class="hh-field"><label class="hh-label">Expiry (MM/YY)</label><input class="hh-input" id="pcExpiry" inputmode="numeric" autocomplete="cc-exp" placeholder="MM/YY" maxlength="5" /></div>
+            <div class="hh-field"><label class="hh-label">CVV</label><input class="hh-input" type="password" id="pcCvv" inputmode="numeric" autocomplete="cc-csc" maxlength="4" placeholder="•••" /></div>
+          </div>
+          <label style="font-size:13px;display:flex;gap:7px;align-items:center;margin-bottom:6px;">
+            <input type="checkbox" id="pcSave" checked /> Save this card for next time
+          </label>
+        </div>
+        <div class="hh-secure">🔒 Demo environment — the CVV is never stored and no real payment is made.</div>
+      </div>
+
+      <div id="cashSection" style="display:none;">
+        <div style="background:var(--teal-bg);border-radius:10px;padding:22px;text-align:center;margin-bottom:6px;">
+          <div style="font-size:34px;animation:floatY 3s ease-in-out infinite;">💵</div>
+          <div style="font-weight:600;color:var(--teal);margin-top:6px;">Cash payment</div>
+          <div style="font-size:12.5px;color:var(--ink-soft);margin-top:4px;">Please have the exact amount ready when you settle up.</div>
+        </div>
+      </div>
+
+      <div class="hh-error" id="payError" style="display:none;margin-top:12px;"></div>
+      <button class="hh-btn brass" id="payBtn" style="width:100%;justify-content:center;margin-top:14px;" onclick="confirmPay()">Confirm payment</button>
+    </div>
+
+    <div id="paySuccessView" class="hh-pay-success" style="display:none;">
+      <svg viewBox="0 0 52 52"><circle cx="26" cy="26" r="25"/><path d="M14 27 l8 8 l16 -17"/></svg>
+      <div class="serif" style="font-size:20px;margin-top:10px;">Payment confirmed</div>
+      <div id="paySuccessMsg" style="font-size:13px;color:var(--ink-soft);margin-top:4px;"></div>
+    </div>
+  </div>
+</div>
+
+<!-- Add-card modal (standalone, from the Saved cards panel) -->
+<div class="hh-modal-backdrop" id="addCardModal">
+  <div class="hh-modal">
+    <div class="hh-modal-head"><div class="hh-modal-title">Add a card</div><button class="hh-iconbtn" onclick="closeAddCardModal()">&times;</button></div>
+    <div id="acPreviewMount"></div>
+    <div class="hh-field"><label class="hh-label">Card number</label><input class="hh-input" id="acNumber" inputmode="numeric" autocomplete="cc-number" placeholder="4242 4242 4242 4242" maxlength="19" /></div>
+    <div class="hh-field"><label class="hh-label">Cardholder name</label><input class="hh-input" id="acName" autocomplete="cc-name" placeholder="Name as on card" /></div>
+    <div class="hh-field-row">
+      <div class="hh-field"><label class="hh-label">Expiry (MM/YY)</label><input class="hh-input" id="acExpiry" inputmode="numeric" placeholder="MM/YY" maxlength="5" /></div>
+      <div class="hh-field"><label class="hh-label">CVV</label><input class="hh-input" type="password" id="acCvv" inputmode="numeric" maxlength="4" placeholder="•••" /></div>
+    </div>
+    <div class="hh-secure">🔒 Demo only — the CVV is never stored, and no real payment network is involved.</div>
+    <div class="hh-error" id="addCardError" style="display:none;"></div>
+    <button class="hh-btn brass" style="width:100%;justify-content:center;" onclick="submitAddCard()">Save card</button>
+  </div>
+</div>
+
+<script src="js/common.js"></script>
+<script>
+  const session = requireAuth(["CUSTOMER"]);
+  renderShell("invoices", session);
+
+  let payments = [];
+  let cards = [];
+
+  document.getElementById("pcPreviewMount").innerHTML = cardPreviewHTML("pc");
+  document.getElementById("acPreviewMount").innerHTML = cardPreviewHTML("ac");
+  initCardForm("pc");
+  initCardForm("ac");
+
+  async function load() {
+    try {
+      [payments, cards] = await Promise.all([api("/payments/mine"), api("/cards/mine")]);
+      renderInvoices();
+      renderCardsList();
+    } catch (err) { toast(err.message); }
+  }
+
+  function renderInvoices() {
+    const sorted = [...payments].sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+    document.getElementById("emptyMsg").style.display = sorted.length ? "none" : "block";
+    document.getElementById("rows").innerHTML = sorted.map((p) => {
+      const paidWith = p.status === "PAID"
+        ? (p.method === "CARD" ? cardChipHTML(p.cardBrand, p.cardLast4) : `<span class="hh-card-chip cash">💵 Cash</span>`)
+        : "—";
+      return `<tr>
+        <td>${p.booking && p.booking.room ? escapeHtml(p.booking.room.name) : "Charge"}</td>
+        <td>${fmtMoney(p.amount)}</td>
+        <td>${pill(p.status)}</td>
+        <td>${paidWith}</td>
+        <td>${p.status === "UNPAID" ? `<button class="hh-btn sm brass" onclick="openPayModal(${p.id})">Pay now</button>` : ""}</td>
+      </tr>`;
+    }).join("");
+  }
+
+  function renderCardsList() {
+    document.getElementById("cardsEmpty").style.display = cards.length ? "none" : "block";
+    document.getElementById("cardsList").innerHTML = cards.map((c) =>
+      miniCardHTML(c, { onDelete: `deleteCard(${c.id})` })).join("");
+  }
+
+  async function deleteCard(id) {
+    if (!confirm("Remove this saved card?")) return;
+    try { await api(`/cards/${id}`, { method: "DELETE" }); await load(); } catch (err) { toast(err.message); }
+  }
+
+  /* ---------------- Add-card modal (standalone) ---------------- */
+  function openAddCardModal() {
+    resetCardForm("ac");
+    document.getElementById("addCardError").style.display = "none";
+    document.getElementById("addCardModal").classList.add("open");
+  }
+  function closeAddCardModal() { document.getElementById("addCardModal").classList.remove("open"); }
+
+  async function submitAddCard() {
+    const errBox = document.getElementById("addCardError");
+    errBox.style.display = "none";
+    const card = readCardForm("ac", { needCvv: true });
+    if (!card) { errBox.textContent = "Please check the highlighted fields."; errBox.style.display = "block"; return; }
+    const payload = { cardholderName: card.cardholderName, cardNumber: card.cardNumber, expiryMonth: card.expiryMonth, expiryYear: card.expiryYear };
+    try {
+      await api("/cards", { method: "POST", body: payload });
+      closeAddCardModal();
+      toast("Card saved.", "success");
+      await load();
+    } catch (err) { errBox.textContent = err.message; errBox.style.display = "block"; }
+  }
+
+  /* ---------------- Pay modal ---------------- */
+  let payMethod = "CARD";
+  let selectedCardId = null;
+
+  function openPayModal(id) {
+    const p = payments.find((x) => x.id === id);
+    document.getElementById("payId").value = p.id;
+    document.getElementById("payAmountBox").innerHTML = `Amount due: <strong>${fmtMoney(p.amount)}</strong>`;
+    document.getElementById("payError").style.display = "none";
+    document.getElementById("payFormView").style.display = "block";
+    document.getElementById("paySuccessView").style.display = "none";
+    resetCardForm("pc");
+    document.getElementById("pcSave").checked = true;
+    selectedCardId = cards.length ? cards[0].id : null;
+    selectMethod("CARD");
+    document.getElementById("payModal").classList.add("open");
+  }
+  function closePayModal() { document.getElementById("payModal").classList.remove("open"); }
+
+  function selectMethod(method) {
+    payMethod = method;
+    document.getElementById("methodCardBtn").classList.toggle("active", method === "CARD");
+    document.getElementById("methodCashBtn").classList.toggle("active", method === "CASH");
+    document.getElementById("cardSection").style.display = method === "CARD" ? "block" : "none";
+    document.getElementById("cashSection").style.display = method === "CASH" ? "block" : "none";
+    document.getElementById("payBtn").textContent = method === "CARD" ? "Confirm & pay" : "Confirm cash payment";
+    if (method === "CARD") renderSavedCardsInPayModal();
+  }
+
+  function renderSavedCardsInPayModal() {
+    const list = document.getElementById("savedCardsList");
+    if (!cards.length) {
+      list.innerHTML = "";
+      showPayCardForm(true);
+      document.getElementById("useNewCardBtn").style.display = "none";
+      return;
+    }
+    list.innerHTML = cards.map((c) =>
+      miniCardHTML(c, { selectable: true, selected: selectedCardId === c.id, onclick: `pickSavedCard(${c.id})` })).join("");
+    document.getElementById("useNewCardBtn").style.display = selectedCardId ? "inline-flex" : "none";
+    document.getElementById("payCardForm").style.display = selectedCardId ? "none" : "block";
+  }
+
+  function pickSavedCard(id) {
+    selectedCardId = id;
+    renderSavedCardsInPayModal();
+  }
+
+  function showPayCardForm(show) {
+    document.getElementById("payCardForm").style.display = show ? "block" : "none";
+    if (show) { selectedCardId = null; if (cards.length) renderSavedCardsInPayModal(); }
+  }
+
+  async function confirmPay() {
+    const id = document.getElementById("payId").value;
+    const errBox = document.getElementById("payError");
+    errBox.style.display = "none";
+
+    let body = { method: payMethod };
+    let summary = "Paid in cash.";
+    if (payMethod === "CARD") {
+      if (selectedCardId) {
+        body.cardId = selectedCardId;
+        const c = cards.find((x) => x.id === selectedCardId);
+        summary = `Charged to ${c.brand} •••• ${c.last4}.`;
+      } else {
+        const card = readCardForm("pc", { needCvv: true });
+        if (!card) { errBox.textContent = "Please check the highlighted card details, or choose a saved card."; errBox.style.display = "block"; return; }
+        body = { method: "CARD", ...card, saveCard: document.getElementById("pcSave").checked };
+        summary = `Charged to ${detectCardBrand(card.cardNumber) || "card"} •••• ${card.cardNumber.slice(-4)}.`;
+      }
+    }
+
+    const btn = document.getElementById("payBtn");
+    btn.disabled = true; btn.textContent = "Processing…";
+    try {
+      await api(`/payments/${id}/pay`, { method: "POST", body });
+      document.getElementById("paySuccessMsg").textContent = summary;
+      document.getElementById("payFormView").style.display = "none";
+      document.getElementById("paySuccessView").style.display = "block";
+      await load();
+      setTimeout(closePayModal, 1800);
+    } catch (err) { errBox.textContent = err.message; errBox.style.display = "block"; }
+    finally { btn.disabled = false; selectMethod(payMethod); }
+  }
+
+  load();
+</script>
+</body>
+</html>

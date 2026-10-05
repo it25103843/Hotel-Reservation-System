@@ -1,0 +1,138 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<title>Payments — Halcyon House</title>
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<link rel="stylesheet" href="css/style.css" />
+</head>
+<body>
+<div class="hh-shell">
+  <div class="hh-side" id="sidebar"></div>
+  <div class="hh-main">
+    <div class="hh-topbar"><div class="serif" style="font-size:20px;">Payments</div></div>
+    <div class="hh-content">
+      <p class="hh-page-sub">Invoices, refunds, and revenue</p>
+      <div id="hh-toast" style="display:none;margin-bottom:16px;"></div>
+
+      <div style="display:flex;justify-content:flex-end;margin-bottom:16px;">
+        <button class="hh-btn brass" onclick="openCreateModal()">+ New charge</button>
+      </div>
+
+      <div class="hh-panel">
+        <div class="hh-table-wrap">
+          <table class="hh-table">
+            <thead><tr><th>Guest</th><th>Room / booking</th><th>Amount</th><th>Method</th><th>Status</th><th></th></tr></thead>
+            <tbody id="rows"></tbody>
+          </table>
+          <div id="emptyMsg" class="hh-empty" style="display:none;">No payments recorded yet.</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="hh-modal-backdrop" id="editModal">
+  <div class="hh-modal">
+    <div class="hh-modal-head"><div class="hh-modal-title">Edit payment</div><button class="hh-iconbtn" onclick="closeEditModal()">&times;</button></div>
+    <input type="hidden" id="payId" />
+    <div class="hh-field"><label class="hh-label">Amount ($)</label><input type="number" class="hh-input" id="payAmount" /></div>
+    <div class="hh-field-row">
+      <div class="hh-field"><label class="hh-label">Method</label>
+        <select class="hh-select" id="payMethod"><option value="">—</option><option value="CARD">Card</option><option value="CASH">Cash</option></select></div>
+      <div class="hh-field"><label class="hh-label">Status</label>
+        <select class="hh-select" id="payStatus"><option value="UNPAID">Unpaid</option><option value="PAID">Paid</option><option value="REFUNDED">Refunded</option><option value="VOID">Void</option></select></div>
+    </div>
+    <button class="hh-btn brass" style="width:100%;justify-content:center;" onclick="saveEdit()">Save payment</button>
+  </div>
+</div>
+
+<div class="hh-modal-backdrop" id="createModal">
+  <div class="hh-modal">
+    <div class="hh-modal-head"><div class="hh-modal-title">New manual charge</div><button class="hh-iconbtn" onclick="closeCreateModal()">&times;</button></div>
+    <div class="hh-field"><label class="hh-label">Account</label>
+      <select class="hh-select" id="chargeAccount"></select></div>
+    <div class="hh-field-row">
+      <div class="hh-field"><label class="hh-label">Amount ($)</label><input type="number" class="hh-input" id="chargeAmount" value="0" /></div>
+      <div class="hh-field"><label class="hh-label">Method</label>
+        <select class="hh-select" id="chargeMethod"><option value="CARD">Card</option><option value="CASH">Cash</option></select></div>
+    </div>
+    <button class="hh-btn brass" style="width:100%;justify-content:center;" onclick="createCharge()">Create charge</button>
+  </div>
+</div>
+
+<script src="js/common.js"></script>
+<script>
+  const session = requireAuth(["ADMIN"]);
+  renderShell("payments", session);
+
+  let payments = [];
+  let accounts = [];
+
+  async function load() {
+    try {
+      [payments, accounts] = await Promise.all([api("/payments"), api("/accounts")]);
+      renderTable();
+      document.getElementById("chargeAccount").innerHTML = accounts.map((a) => `<option value="${a.id}">${escapeHtml(a.name)} (${escapeHtml(a.email)})</option>`).join("");
+    } catch (err) { toast(err.message); }
+  }
+
+  function renderTable() {
+    const sorted = [...payments].sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+    document.getElementById("emptyMsg").style.display = sorted.length ? "none" : "block";
+    document.getElementById("rows").innerHTML = sorted.map((p) => `
+      <tr>
+        <td>${escapeHtml((p.account && p.account.name) || "—")}</td>
+        <td>${p.booking && p.booking.room ? escapeHtml(p.booking.room.name) : "Manual charge"}</td>
+        <td>${fmtMoney(p.amount)}</td>
+        <td>${p.method === "CARD" ? (p.cardLast4 ? cardChipHTML(p.cardBrand, p.cardLast4) : `<span class="hh-card-chip">💳 Card</span>`) : p.method === "CASH" ? `<span class="hh-card-chip cash">💵 Cash</span>` : "—"}</td>
+        <td>${pill(p.status)}</td>
+        <td>
+          <div style="display:flex;gap:4px;justify-content:flex-end;">
+            <button class="hh-iconbtn" onclick="openEditModal(${p.id})">✎</button>
+            ${p.status === "PAID" ? `<button class="hh-iconbtn" title="Refund" onclick="refund(${p.id})">↺</button>` : ""}
+          </div>
+        </td>
+      </tr>`).join("");
+  }
+
+  function openEditModal(id) {
+    const p = payments.find((x) => x.id === id);
+    document.getElementById("payId").value = p.id;
+    document.getElementById("payAmount").value = p.amount;
+    document.getElementById("payMethod").value = p.method || "";
+    document.getElementById("payStatus").value = p.status;
+    document.getElementById("editModal").classList.add("open");
+  }
+  function closeEditModal() { document.getElementById("editModal").classList.remove("open"); }
+  async function saveEdit() {
+    const id = document.getElementById("payId").value;
+    const payload = {
+      amount: Number(document.getElementById("payAmount").value),
+      method: document.getElementById("payMethod").value || null,
+      status: document.getElementById("payStatus").value,
+    };
+    try { await api(`/payments/${id}`, { method: "PUT", body: payload }); closeEditModal(); await load(); } catch (err) { toast(err.message); }
+  }
+
+  async function refund(id) {
+    if (!confirm("Refund this payment?")) return;
+    try { await api(`/payments/${id}/refund`, { method: "POST" }); await load(); } catch (err) { toast(err.message); }
+  }
+
+  function openCreateModal() { document.getElementById("createModal").classList.add("open"); }
+  function closeCreateModal() { document.getElementById("createModal").classList.remove("open"); }
+  async function createCharge() {
+    const payload = {
+      accountId: Number(document.getElementById("chargeAccount").value),
+      amount: Number(document.getElementById("chargeAmount").value),
+      method: document.getElementById("chargeMethod").value,
+      status: "PAID",
+    };
+    try { await api("/payments", { method: "POST", body: payload }); closeCreateModal(); await load(); } catch (err) { toast(err.message); }
+  }
+
+  load();
+</script>
+</body>
+</html>
